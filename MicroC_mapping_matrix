@@ -1,0 +1,31 @@
+
+#creating indexed genome files compatible with bwa and pairix
+samtools faidx <genome file>.fa
+cut -f1,2 <genome file>.fa.fai > <genome name>.genome
+bwa index <genome file>.fa
+
+#bwa, pairtools and samtools for analysis and alignment
+mkdir tmpfiles
+
+#to make a matrix that includes repeats
+bwa mem -5SP -T0 -t16 <genome file>.fa <raw data file R1 path> <raw data file R2 path> | pairtools parse --min-mapq 0 --walks-policy 5unique --max-inter-align-gap 30 --nproc-in 8 --nproc-out 8 --chroms-path <path to genome index file>.genome | pairtools sort --tmpdir=tmpfiles/ --nproc 16|pairtools dedup --nproc-in 8 --nproc-out 8 --mark-dups --output-stats <stats file name>.txt | pairtools split --nproc-in 8 --nproc-out 8 --output-pairs <pairs file name>.pairs --output-sam -|samtools view -bS -@16 | samtools sort -@16 -o <pairs file name>.PT.bam;samtools index <pairs file name>.PT.bam
+
+#to make a matrix filtering out repeats
+bwa mem -5SP -T0 -t16 <genome file>.fa <raw data file R1 path> <raw data file R2 path> | pairtools parse --min-mapq 40 --walks-policy 5unique --max-inter-align-gap 30 --nproc-in 8 --nproc-out 8 --chroms-path <path to genome index file>.genome | pairtools sort --tmpdir=tmpfiles/ --nproc 16|pairtools dedup --nproc-in 8 --nproc-out 8 --mark-dups --output-stats <stats file name>.txt | pairtools split --nproc-in 8 --nproc-out 8 --output-pairs <pairs file name>.pairs --output-sam -|samtools view -bS -@16 | samtools sort -@16 -o <pairs file name>.PT.bam;samtools index <pairs file name>.PT.bam
+
+
+#to print the stats
+python3 Micro-C/get_qc.py -p <stats file name>.txt
+
+#running pairix to index the samples for .cool matrix
+#first you need to zip the files
+bgzip <pairs file name>.pairs
+<pairix path> <pairs file name>.pairs.gz
+
+#running cooler to create the contact map that can be viewed in HiGlass, must include the reference to the cooler version that is on our server or it will not run
+
+#same as above but binning at 100bp
+cooler-0.8.9 cload pairix -p 8 <genome name>.genome:100 <pairs file name>.pairs.gz <cool file name>.cool
+
+#this balances the .cool file and creates a .mcool file 
+cooler-0.8.9 zoomify --balance -p 8 <cool file name>.cool
